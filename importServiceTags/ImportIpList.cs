@@ -10,6 +10,7 @@ using Azure.Storage.Blobs;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ImportAzIpRanges.Tests")]
 namespace ImportAzIpRanges
@@ -86,6 +87,19 @@ namespace ImportAzIpRanges
             return null;
         }
 
+                
+        public async Task<bool> FileExistsBlobStorageAsync(string containerName,string filename){
+            
+            var connectionString = Environment.GetEnvironmentVariable("FileStorAcc");
+
+            var container = new BlobContainerClient(connectionString, containerName);
+            var blockBlob = container.GetBlobClient(filename);
+            var memoryStream = new MemoryStream();
+
+            return await blockBlob.ExistsAsync();
+  
+        }
+
     }
 
     public static class AzureIpFileFunctions
@@ -98,19 +112,36 @@ namespace ImportAzIpRanges
         // receives a pointer to delta of changes (file, storage blob) 
         // then applies them 
 
-        [FunctionName("ImportIpsAxtionDelta")]
-        public static async Task  ActionDelta(
-            [QueueTrigger("actiondelta")] string fileName, 
+        [FunctionName("ImportIpsActionDelta")]
+        [Singleton(Mode=SingletonMode.Listener)]
+        public static async Task  FnActionDelta(
+            [QueueTrigger("actiondelta" ,Connection="FileStorAcc")] string fileName, 
             ILogger log)
         {
+            var storage= new StorageProvider();
+            var newFileName = $"{fileName}.completed";
+
             if ( string.IsNullOrWhiteSpace(fileName)){
                 log.LogInformation($"No delta received. No further action.");
                 return;
             }
+
+            if ( await storage.FileExistsBlobStorageAsync(_containerName,newFileName)){
+                log.LogInformation($"This delta received already and completed. No further action.");
+                return;
+            }
+
             log.LogInformation($"delta {fileName} received");
 
             //
             //
+
+            
+            var newFile = new ServiceTagFile() { ChangeNumber= fileName };
+            var stream =StringToStream(SerializeFile(newFile));
+            await storage.WriteStreamAsBlobToStorageAsync(stream,_containerName,newFileName);
+            // enqueue reference to delta for function to write access restrictions
+            log.LogInformation($"C# function actioned {fileName} and wrote completed {newFileName}");
         }
 
         // 2
@@ -119,12 +150,20 @@ namespace ImportAzIpRanges
         // compares for any delta/changes
 
         [FunctionName("ImportIpsCompare")]
+        [Singleton(Mode=SingletonMode.Listener)]
         [return: Queue("actiondelta", Connection="FileStorAcc")]
-        public static async Task<string>  CompareFiles(
-            [QueueTrigger("azureipfileready")] string fileName, 
+        public static async Task<string>  FnCompareFiles(
+            [QueueTrigger("nextazureipfile", Connection="FileStorAcc")] string fileName, 
             ILogger log)
         {
             var storage= new StorageProvider();
+            // in case of multiple runs check so see if there's already a delta
+            var existingDelta = await storage.FileExistsBlobStorageAsync(_containerName, $"{fileName}.delta");
+            if ( existingDelta )
+            {
+                log.LogInformation($"Existing Delta found for {fileName}, duplicate run for the same file?");
+                return string.Empty;
+            }
             // check for a previous change number
             var currentFileStream = await storage.ReadFileFromBlobToStorageAsync(_containerName,fileName);
             var currentFile = DeserializeFile( StreamToString(currentFileStream));
@@ -151,10 +190,13 @@ namespace ImportAzIpRanges
         
         // 1
         // Trigger function / Task runner
+        // every sunday (weekly)
+        //
+        // For Local test/debug invocation with FUNC CORE TOOLS then POST to http://localhost:{port}/admin/functions/{function_name}
 
         [FunctionName("ImportIps")]
         [return: Queue("nextazureipfile", Connection="FileStorAcc")]
-        public static async Task<string> Run( [TimerTrigger("0 */1 * * * *")]TimerInfo myTimer,
+        public static async Task<string> FnEntryPointRun([TimerTrigger("0 0 0 * * 0")]TimerInfo myTimer ,
             ILogger log)
         {
 

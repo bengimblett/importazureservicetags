@@ -21,7 +21,7 @@ Compress-Archive @compress -Force
 
 write-host "zipped" -ForegroundColor Green
 
-az functionapp deployment source config-zip  -g $rg -n $funcAppName --src $zipName
+az functionapp deployment source config-zip  -g $rg -n $funcAppName --src $zipName 
 
 write-host "published" -ForegroundColor Green
 
