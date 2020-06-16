@@ -111,6 +111,7 @@ namespace ImportAzIpRanges
         // 3
         // receives a pointer to delta of changes (file, storage blob) 
         // then applies them 
+        // run only one instance
 
         [FunctionName("ImportIpsActionDelta")]
         [Singleton(Mode=SingletonMode.Listener)]
@@ -125,7 +126,7 @@ namespace ImportAzIpRanges
                 log.LogInformation($"No delta received. No further action.");
                 return;
             }
-
+            // set to run as singleton so this is belt and brace
             if ( await storage.FileExistsBlobStorageAsync(_containerName,newFileName)){
                 log.LogInformation($"This delta received already and completed. No further action.");
                 return;
@@ -134,8 +135,8 @@ namespace ImportAzIpRanges
             log.LogInformation($"delta {fileName} received");
 
             //
-            //
-
+            // action delta
+            // 
             
             var newFile = new ServiceTagFile() { ChangeNumber= fileName };
             var stream =StringToStream(SerializeFile(newFile));
@@ -148,6 +149,7 @@ namespace ImportAzIpRanges
         // receives a pointer to latest file from the trigger function 
         // looks for any prior
         // compares for any delta/changes
+        // run only once instance
 
         [FunctionName("ImportIpsCompare")]
         [Singleton(Mode=SingletonMode.Listener)]
@@ -157,7 +159,7 @@ namespace ImportAzIpRanges
             ILogger log)
         {
             var storage= new StorageProvider();
-            // in case of multiple runs check so see if there's already a delta
+            // in case of multiple runs check so see if there's already a delta - set to run as singleton , so this is belt and brace
             var existingDelta = await storage.FileExistsBlobStorageAsync(_containerName, $"{fileName}.delta");
             if ( existingDelta )
             {
@@ -262,8 +264,8 @@ namespace ImportAzIpRanges
 
             foreach ( var value in currentFile.Values){
                 var priorValueById=previousFile.Values.Find(v=> v.Id==value.Id);
-                if ( null ==priorValueById || value.Properties.ChangeNumber=="1"){
-                    // didnt exist before, or must be new this time as current value property is #1
+                if ( null ==priorValueById ){
+                    // did not exist before, or must be new this time as current value property is #1
                     delta.Add(value);
                 }
                 else

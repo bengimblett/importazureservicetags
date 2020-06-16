@@ -1,6 +1,17 @@
+### invoke timed func
+
 POST http://0.0.0.0:7071/admin/functions/ImportIps HTTP/1.1
 content-type: application/json
 
 {
     "input": null
+}
+
+### invite compare
+
+POST http://0.0.0.0:7071/admin/functions/ImportIpsCompare HTTP/1.1
+Content-Type:  application/json
+
+{
+    "input": "66"
 }
