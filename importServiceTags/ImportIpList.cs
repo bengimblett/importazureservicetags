@@ -51,7 +51,7 @@ namespace ImportAzIpRanges
 
         public async Task<bool> WriteStreamAsBlobToStorageAsync(Stream content, string containerName,string filename){
 
-            var connectionString = Environment.GetEnvironmentVariable("AzureWebJobsStorage");
+            var connectionString = Environment.GetEnvironmentVariable("FileStorAcc");
             var blobClient = new BlobServiceClient(connectionString);
             
             var containerClient =  blobClient.GetBlobContainerClient(containerName);
@@ -71,7 +71,7 @@ namespace ImportAzIpRanges
 
         public async Task<Stream> ReadFileFromBlobToStorageAsync(string containerName,string filename){
             
-            var connectionString = Environment.GetEnvironmentVariable("AzureWebJobsStorage");
+            var connectionString = Environment.GetEnvironmentVariable("FileStorAcc");
 
             var container = new BlobContainerClient(connectionString, containerName);
             var blockBlob = container.GetBlobClient(filename);
@@ -94,8 +94,33 @@ namespace ImportAzIpRanges
         private static HttpClient _httpClient = new HttpClient();
         private const string _containerName =   "azure-ip-ranges";
 
+        // 3
+        // receives a pointer to delta of changes (file, storage blob) 
+        // then applies them 
+
+        [FunctionName("ImportIpsAxtionDelta")]
+        public static async Task  ActionDelta(
+            [QueueTrigger("actiondelta")] string fileName, 
+            ILogger log)
+        {
+            if ( string.IsNullOrWhiteSpace(fileName)){
+                log.LogInformation($"No delta received. No further action.");
+                return;
+            }
+            log.LogInformation($"delta {fileName} received");
+
+            //
+            //
+        }
+
+        // 2
+        // receives a pointer to latest file from the trigger function 
+        // looks for any prior
+        // compares for any delta/changes
+
         [FunctionName("ImportIpsCompare")]
-        public static async Task  QueueTrigger(
+        [return: Queue("actiondelta", Connection="FileStorAcc")]
+        public static async Task<string>  CompareFiles(
             [QueueTrigger("azureipfileready")] string fileName, 
             ILogger log)
         {
@@ -116,13 +141,19 @@ namespace ImportAzIpRanges
                 var stream =StringToStream(SerializeFile(newFile));
                 await storage.WriteStreamAsBlobToStorageAsync(stream,_containerName,newFileName);
                 // enqueue reference to delta for function to write access restrictions
+                log.LogInformation($"C# function processed: {fileName} and wrote delta {newFileName}");
+                return newFileName;
             }
 
-            log.LogInformation($"C# function processed: {fileName}");
+            log.LogInformation($"C# function processed: {fileName}. No delta.");
+            return string.Empty;
         }
         
+        // 1
+        // Trigger function / Task runner
+
         [FunctionName("ImportIps")]
-        [return: Queue("nextazureipfile", Connection="AzureWebJobsStorage")]
+        [return: Queue("nextazureipfile", Connection="FileStorAcc")]
         public static async Task<string> Run( [TimerTrigger("0 */1 * * * *")]TimerInfo myTimer,
             ILogger log)
         {
