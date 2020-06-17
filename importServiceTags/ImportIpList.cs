@@ -228,9 +228,9 @@ namespace ImportAzIpRanges
             ILogger log)
         {
 
-                var tenantId = "72f988bf-86f1-41af-91ab-2d7cd011db47";// Environment.GetEnvironmentVariable("TenantId");
-                var region = "westeurope"; // Environment.GetEnvironmentVariable("Region");
-                var subscriptionId = "09a55fcd-23ab-4b16-98b7-c17f85e641d5"; //  Environment.GetEnvironmentVariable("SubscriptionId");
+                var tenantId = Environment.GetEnvironmentVariable("TenantId");
+                var region = Environment.GetEnvironmentVariable("Region");
+                var subscriptionId = Environment.GetEnvironmentVariable("SubscriptionId");
                 var azureServiceTokenProvider = new AzureServiceTokenProvider();
                 var token = await azureServiceTokenProvider.GetAccessTokenAsync("https://management.azure.com", tenantId);
 
