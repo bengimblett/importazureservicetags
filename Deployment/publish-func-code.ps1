@@ -112,7 +112,7 @@ function Publish-Infra {
 }
 
 #entry point
-Publish-Infra
+#Publish-Infra
 
 #comment above then, uncomment below - to push just func code
-#Publish-App-Code -rg 'GetAzureServiceTagFiles5-rg' -funcAppName 'servicetagfile-func'#
+Publish-App-Code -rg 'GetAzureServiceTagFiles5-rg' -funcAppName 'servicetagfile-func'#

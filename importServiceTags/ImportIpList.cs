@@ -23,6 +23,8 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Azure.WebJobs.Extensions.EventGrid;
+using Microsoft.Azure.EventGrid.Models;
+using Newtonsoft.Json.Linq;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ImportAzIpRanges.Tests")]
 namespace ImportAzIpRanges
@@ -125,18 +127,25 @@ namespace ImportAzIpRanges
         // then applies them 
         // run only one instance
         // AEG used because more than one application may want to process / filter the changeset
+        // use ngrok to catch events for local debugging: https://docs.microsoft.com/en-us/azure/azure-functions/functions-debug-event-grid-trigger-local#allow-azure-to-call-your-local-function
 
         [FunctionName("ImportIpsActionDelta")]
         [Singleton(Mode=SingletonMode.Listener)]
         public static async Task  FnActionDelta(
-            [EventGridTrigger] string fileName, 
+            [EventGridTrigger] EventGridEvent eventGridEvent, 
             ILogger log)
         {
-            // should never happen for storage event
-            if ( string.IsNullOrWhiteSpace(fileName)){
-                log.LogInformation($"No storage ref received. No further action.");
-                return;
-            }
+            // pull the filename from the event
+            log.LogInformation($"Event received {eventGridEvent.Id}");
+
+            StorageBlobCreatedEventData data = (eventGridEvent.Data as JObject).ToObject<StorageBlobCreatedEventData>();
+            var fileName = string.Empty;
+            var uri = new Uri(data.Url);
+            fileName = System.IO.Path.GetFileName(uri.LocalPath);
+
+            log.LogInformation($"filename is {fileName}");
+
+
             // check its the file we're interested in
             if ( ! fileName.EndsWith(".delta")){
                 log.LogInformation($"Not interested in this event { fileName}");
