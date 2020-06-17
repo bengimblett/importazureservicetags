@@ -15,3 +15,8 @@ Content-Type:  application/json
 {
     "input": "66"
 }
+
+###
+
+GET https://management.azure.com/subscriptions/{subscriptionId}}/providers/Microsoft.Network/locations/westeurope/serviceTags?api-version=2020-04-01"
+Authorization: Bearer <token>

@@ -22,7 +22,7 @@ using Azure.Storage.Blobs;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.Mvc;
+using Microsoft.Azure.WebJobs.Extensions.EventGrid;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ImportAzIpRanges.Tests")]
 namespace ImportAzIpRanges
@@ -124,20 +124,27 @@ namespace ImportAzIpRanges
         // receives a pointer to delta of changes (file, storage blob) 
         // then applies them 
         // run only one instance
+        // AEG used because more than one application may want to process / filter the changeset
 
         [FunctionName("ImportIpsActionDelta")]
         [Singleton(Mode=SingletonMode.Listener)]
         public static async Task  FnActionDelta(
-            [QueueTrigger("actiondelta" ,Connection="FileStorAcc")] string fileName, 
+            [EventGridTrigger] string fileName, 
             ILogger log)
         {
+            // should never happen for storage event
+            if ( string.IsNullOrWhiteSpace(fileName)){
+                log.LogInformation($"No storage ref received. No further action.");
+                return;
+            }
+            // check its the file we're interested in
+            if ( ! fileName.EndsWith(".delta")){
+                log.LogInformation($"Not interested in this event { fileName}");
+                return;
+            }
             var storage= new StorageProvider();
             var newFileName = $"{fileName}.completed";
 
-            if ( string.IsNullOrWhiteSpace(fileName)){
-                log.LogInformation($"No delta received. No further action.");
-                return;
-            }
             // set to run as singleton so this is belt and brace
             if ( await storage.FileExistsBlobStorageAsync(_containerName,newFileName)){
                 log.LogInformation($"This delta received already and completed. No further action.");
@@ -165,8 +172,7 @@ namespace ImportAzIpRanges
 
         [FunctionName("ImportIpsCompare")]
         [Singleton(Mode=SingletonMode.Listener)]
-        [return: Queue("actiondelta", Connection="FileStorAcc")]
-        public static async Task<string>  FnCompareFiles(
+        public static async Task  FnCompareFiles(
             [QueueTrigger("nextazureipfile", Connection="FileStorAcc")] string fileName, 
             ILogger log)
         {
@@ -176,7 +182,7 @@ namespace ImportAzIpRanges
             if ( existingDelta )
             {
                 log.LogInformation($"Existing Delta found for {fileName}, duplicate run for the same file?");
-                return string.Empty;
+                return ;
             }
             // check for a previous change number
             var currentFileStream = await storage.ReadFileFromBlobToStorageAsync(_containerName,fileName);
@@ -192,14 +198,13 @@ namespace ImportAzIpRanges
                 var newFileName = $"{fileName}.delta";
                 var newFile = new ServiceTagFile() { Values=delta };
                 var stream =StringToStream(SerializeFile(newFile));
+                // AEG event will be raised for next func
                 await storage.WriteStreamAsBlobToStorageAsync(stream,_containerName,newFileName);
                 // enqueue reference to delta for function to write access restrictions
                 log.LogInformation($"C# function processed: {fileName} and wrote delta {newFileName}");
-                return newFileName;
             }
 
             log.LogInformation($"C# function processed: {fileName}. No delta.");
-            return string.Empty;
         }
         
         // 1
