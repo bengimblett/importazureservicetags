@@ -4,4 +4,4 @@ Sample to demonstrate https://docs.microsoft.com/en-us/azure/virtual-network/ser
 
 ![App Architecture](Drawing.png)
 
-> ![Note] Different regions have different file versions. The code stores the file by container which is named by the region
+> [!Note] Different regions have different file versions. The code stores the file by container which is named by the region
