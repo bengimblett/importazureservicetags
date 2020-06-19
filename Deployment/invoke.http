@@ -16,7 +16,9 @@ Content-Type:  application/json
     "input": "66"
 }
 
-###
-
-GET https://management.azure.com/subscriptions/{subscriptionId}}/providers/Microsoft.Network/locations/westeurope/serviceTags?api-version=2020-04-01"
+### The supported locations are 
+### 'westus, eastus, northeurope, westeurope, eastasia, southeastasia, northcentralus, southcentralus, centralus, eastus2, japaneast, japanwest, brazilsouth, 
+### australiaeast, australiasoutheast, centralindia, southindia, westindia, canadacentral, canadaeast, westcentralus, westus2, ukwest, uksouth, koreacentral, 
+### koreasouth, francecentral, australiacentral, southafricanorth, uaenorth, switzerlandnorth, germanywestcentral, norwayeast'."
+GET https://management.azure.com/subscriptions/<subid>/providers/Microsoft.Network/locations/westcentralus/serviceTags?api-version=2020-05-01
 Authorization: Bearer <token>

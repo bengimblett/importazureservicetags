@@ -84,6 +84,18 @@ namespace ImportAzIpRanges
             return true;
         }
 
+        public async Task<bool> DeleteFileFromBlobStorageAsync(string containerName, string fileName){
+            var connectionString = Environment.GetEnvironmentVariable("FileStorAcc");
+
+            var container = new BlobContainerClient(connectionString, containerName);
+            var blockBlob = container.GetBlobClient(fileName);
+            var memoryStream = new MemoryStream();
+
+            await blockBlob.DeleteIfExistsAsync();
+
+            return true;  
+        }
+
         public async Task<Stream> ReadFileFromBlobToStorageAsync(string containerName,string filename){
             
             var connectionString = Environment.GetEnvironmentVariable("FileStorAcc");
@@ -120,8 +132,6 @@ namespace ImportAzIpRanges
     {
  
         private static HttpClient _httpClient = new HttpClient();
-        private const string _containerName =   "azure-ip-ranges";
-
         // 3
         // receives a pointer to delta of changes (file, storage blob) 
         // then applies them 
@@ -153,9 +163,9 @@ namespace ImportAzIpRanges
             }
             var storage= new StorageProvider();
             var newFileName = $"{fileName}.completed";
-
+            var containerName = Environment.GetEnvironmentVariable("region");
             // set to run as singleton so this is belt and brace
-            if ( await storage.FileExistsBlobStorageAsync(_containerName,newFileName)){
+            if ( await storage.FileExistsBlobStorageAsync(containerName,newFileName)){
                 log.LogInformation($"This delta received already and completed. No further action.");
                 return;
             }
@@ -168,7 +178,7 @@ namespace ImportAzIpRanges
             
             var newFile = new ServiceTagFile() { ChangeNumber= fileName };
             var stream =StringToStream(SerializeFile(newFile));
-            await storage.WriteStreamAsBlobToStorageAsync(stream,_containerName,newFileName);
+            await storage.WriteStreamAsBlobToStorageAsync(stream,containerName,newFileName);
             // enqueue reference to delta for function to write access restrictions
             log.LogInformation($"C# function actioned {fileName} and wrote completed {newFileName}");
         }
@@ -185,21 +195,26 @@ namespace ImportAzIpRanges
             [QueueTrigger("nextazureipfile", Connection="FileStorAcc")] string fileName, 
             ILogger log)
         {
+            var containerName = Environment.GetEnvironmentVariable("region");
             var storage= new StorageProvider();
             // in case of multiple runs check so see if there's already a delta - set to run as singleton , so this is belt and brace
-            var existingDelta = await storage.FileExistsBlobStorageAsync(_containerName, $"{fileName}.delta");
+            var existingDelta = await storage.FileExistsBlobStorageAsync(containerName, $"{fileName}.delta");
             if ( existingDelta )
             {
                 log.LogInformation($"Existing Delta found for {fileName}, duplicate run for the same file?");
                 return ;
             }
             // check for a previous change number
-            var currentFileStream = await storage.ReadFileFromBlobToStorageAsync(_containerName,fileName);
+            var currentFileStream = await storage.ReadFileFromBlobToStorageAsync(containerName,fileName);
             var currentFile = DeserializeFile( StreamToString(currentFileStream));
             if ( currentFile == null ){
-                throw new Exception($"No valid file named {fileName} for container {_containerName}");
+                throw new Exception($"No valid file named {fileName} for container {containerName}");
             }
-            var previousFile = await GetPreviousFileAsync(storage,_containerName,fileName);
+            if ( currentFile.Values == null || currentFile.Values.Count==0){
+                // empty file , remove (this can happen?)
+                await storage.DeleteFileFromBlobStorageAsync(containerName, fileName);
+            }
+            var previousFile = await GetPreviousFileAsync(storage,containerName,fileName);
 
             var delta = CompareFiles(currentFile,previousFile);
 
@@ -208,7 +223,7 @@ namespace ImportAzIpRanges
                 var newFile = new ServiceTagFile() { Values=delta };
                 var stream =StringToStream(SerializeFile(newFile));
                 // AEG event will be raised for next func
-                await storage.WriteStreamAsBlobToStorageAsync(stream,_containerName,newFileName);
+                await storage.WriteStreamAsBlobToStorageAsync(stream,containerName,newFileName);
                 // enqueue reference to delta for function to write access restrictions
                 log.LogInformation($"C# function processed: {fileName} and wrote delta {newFileName}");
             }
@@ -230,6 +245,7 @@ namespace ImportAzIpRanges
 
                 var tenantId = Environment.GetEnvironmentVariable("TenantId");
                 var region = Environment.GetEnvironmentVariable("Region");
+                var containerName = region;
                 var subscriptionId = Environment.GetEnvironmentVariable("SubscriptionId");
                 var azureServiceTokenProvider = new AzureServiceTokenProvider();
                 var token = await azureServiceTokenProvider.GetAccessTokenAsync("https://management.azure.com", tenantId);
@@ -246,7 +262,7 @@ namespace ImportAzIpRanges
                     var responseFile = new MemoryStream();
                     await response.Content.CopyToAsync(responseFile);
                     responseFile.Seek(0,SeekOrigin.Begin);//rewind
-                    await new StorageProvider().WriteStreamAsBlobToStorageAsync(responseFile,_containerName,changeNumber);
+                    await new StorageProvider().WriteStreamAsBlobToStorageAsync(responseFile,containerName,changeNumber);
                     return changeNumber;
                 }
                 else{
