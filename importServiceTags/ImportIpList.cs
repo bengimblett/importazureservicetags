@@ -212,6 +212,7 @@ namespace ImportAzIpRanges
             }
             if ( currentFile.Values == null || currentFile.Values.Count==0){
                 // empty file , remove (this can happen?)
+                log.LogInformation("empty current file found, removing.");
                 await storage.DeleteFileFromBlobStorageAsync(containerName, fileName);
                 return;
             }
