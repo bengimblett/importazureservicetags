@@ -213,6 +213,7 @@ namespace ImportAzIpRanges
             if ( currentFile.Values == null || currentFile.Values.Count==0){
                 // empty file , remove (this can happen?)
                 await storage.DeleteFileFromBlobStorageAsync(containerName, fileName);
+                return;
             }
             var previousFile = await GetPreviousFileAsync(storage,containerName,fileName);
 
